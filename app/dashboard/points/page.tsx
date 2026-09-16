@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { deleteQRPoint } from '@/lib/delete-qr-point';
 import { QRCodeCanvas } from 'qrcode.react';
 
 type QRPoint = {
@@ -18,6 +19,8 @@ export default function QRPointsPage() {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [pointToDelete, setPointToDelete] = useState<QRPoint | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteInFlight = useRef(false);
   const [orgId, setOrgId] = useState<string | null>(null);
 
   const baseUrl =
@@ -81,28 +84,23 @@ export default function QRPointsPage() {
   };
 
   const handleDelete = async () => {
-    if (!pointToDelete) return;
+    if (!pointToDelete || deleteInFlight.current) return;
 
     const { id: pointId } = pointToDelete;
 
+    deleteInFlight.current = true;
     setDeletingId(pointId);
-
-    const { error } = await supabase
-      .from('qr_points')
-      .delete()
-      .eq('id', pointId);
-
-    setDeletingId(null);
-
-    if (error) {
-      alert('ลบจุดไม่สำเร็จ: ' + error.message);
-      return;
+    setDeleteError(null);
+    try {
+      await deleteQRPoint(supabase, pointId);
+      setPoints((current) => current.filter((point) => point.id !== pointId));
+      setPointToDelete(null);
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'ลบจุดไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      deleteInFlight.current = false;
+      setDeletingId(null);
     }
-
-    setPoints((current) =>
-      current.filter((point) => point.id !== pointId)
-    );
-    setPointToDelete(null);
   };
 
   const downloadQR = (pointId: string, pointName: string) => {
@@ -397,7 +395,10 @@ export default function QRPointsPage() {
                         </button>
 
                         <button
-                          onClick={() => setPointToDelete(point)}
+                          onClick={() => {
+                            setDeleteError(null);
+                            setPointToDelete(point);
+                          }}
                           disabled={isDeleting}
                           className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-rose-400/20 bg-rose-400/[0.07] text-xs font-bold text-rose-300 transition hover:bg-rose-400/12 hover:text-rose-200 disabled:cursor-not-allowed disabled:opacity-40"
                         >
@@ -487,7 +488,16 @@ export default function QRPointsPage() {
                 <p className="text-xs leading-5 text-rose-200/90">
                   การดำเนินการนี้ไม่สามารถย้อนกลับได้ และ QR Code นี้จะใช้งานไม่ได้ทันที
                 </p>
+                <p className="mt-2 text-xs leading-5 text-slate-400">
+                  ประวัติแจ้งเหตุและบันทึกการดำเนินการจะยังคงอยู่ โดยไม่ผูกกับจุด QR ที่ลบแล้ว
+                </p>
               </div>
+
+              {deleteError && (
+                <p role="alert" className="mt-4 break-words rounded-xl border border-rose-400/25 bg-rose-500/10 p-3 text-sm leading-6 text-rose-200">
+                  {deleteError}
+                </p>
+              )}
 
               <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <button
