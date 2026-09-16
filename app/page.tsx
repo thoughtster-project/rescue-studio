@@ -1,4 +1,5 @@
 'use client';
+
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
@@ -10,43 +11,125 @@ type QRPoint = {
   is_active: boolean;
 };
 
-type ModuleCard = {
+type StaffModule = {
   href: string;
-  label: string;
+  eyebrow: string;
   title: string;
   description: string;
-  accent: 'red' | 'blue' | 'green';
+  accent: 'blue' | 'green';
 };
 
-const modules: ModuleCard[] = [
+const staffModules: StaffModule[] = [
   {
     href: '/dashboard',
-    label: 'ภาพรวม',
+    eyebrow: 'ภาพรวมการปฏิบัติการ',
     title: 'Dashboard',
-    description: 'ติดตามเหตุที่แจ้งเข้ามาและสถานะการตอบสนองของทีม',
+    description: 'ติดตามเหตุที่แจ้งเข้ามาและสถานะการตอบสนองของทีมแบบรวมศูนย์',
     accent: 'blue',
   },
   {
     href: '/dashboard/points',
-    label: 'จุดติดตั้ง',
+    eyebrow: 'จัดการจุดติดตั้ง',
     title: 'จัดการ QR Code',
-    description: 'สร้าง แก้ไข และดาวน์โหลด QR ประจำจุดแจ้งเหตุ',
+    description: 'สร้าง แก้ไข และดาวน์โหลด QR Code สำหรับแต่ละจุดแจ้งเหตุ',
     accent: 'green',
-  },
-  {
-    href: '/login',
-    label: 'ทีมงาน',
-    title: 'เข้าสู่ระบบ',
-    description: 'สำหรับเจ้าหน้าที่ที่ต้องเข้าถึงข้อมูลภายใน',
-    accent: 'red',
   },
 ];
 
-const accentStyles: Record<ModuleCard['accent'], { ring: string; text: string; dot: string }> = {
-  red: { ring: 'group-hover:ring-red-500/40', text: 'text-red-400', dot: 'bg-red-500' },
-  blue: { ring: 'group-hover:ring-blue-500/40', text: 'text-blue-400', dot: 'bg-blue-500' },
-  green: { ring: 'group-hover:ring-green-500/40', text: 'text-green-400', dot: 'bg-green-500' },
+const moduleStyles: Record<
+  StaffModule['accent'],
+  {
+    icon: string;
+    label: string;
+    border: string;
+    glow: string;
+  }
+> = {
+  blue: {
+    icon: 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/20',
+    label: 'text-blue-300',
+    border: 'hover:border-blue-400/40',
+    glow: 'group-hover:bg-blue-500/10',
+  },
+  green: {
+    icon: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/20',
+    label: 'text-emerald-300',
+    border: 'hover:border-emerald-400/40',
+    glow: 'group-hover:bg-emerald-500/10',
+  },
 };
+
+function ArrowUpRightIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7 17 17 7M8 7h9v9" />
+    </svg>
+  );
+}
+
+function DashboardIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.8}
+    >
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.2" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.2" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.2" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.2" />
+    </svg>
+  );
+}
+
+function QRIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.8}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm11 1h2m3 0v2m-4 3h4m-2-5v5"
+      />
+    </svg>
+  );
+}
+
+function ShieldIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={1.8}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 3.5c2.2 1.8 4.8 2.8 7.5 3v5.1c0 4.3-2.8 7.7-7.5 8.9-4.7-1.2-7.5-4.6-7.5-8.9V6.5c2.7-.2 5.3-1.2 7.5-3Z"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="m9.4 12 1.7 1.7 3.7-3.9" />
+    </svg>
+  );
+}
 
 export default function Home() {
   const [points, setPoints] = useState<QRPoint[]>([]);
@@ -67,104 +150,251 @@ export default function Home() {
         setStatus('ready');
       }
     };
+
     fetchPoints();
   }, []);
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-gray-950 via-gray-900 to-black px-6 py-16 text-white">
-      <div className="mx-auto w-full max-w-5xl">
-        {/* Header */}
-        <div className="text-center">
-          <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-1 text-sm font-medium text-red-400">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
-            Emergency Response Platform
-          </span>
-          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl">
+    <main className="relative min-h-screen overflow-hidden bg-[#050914] px-5 py-8 text-white sm:px-8 sm:py-12">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:48px_48px]" />
+        <div className="absolute left-1/2 top-[-20rem] h-[42rem] w-[42rem] -translate-x-1/2 rounded-full bg-blue-500/10 blur-[130px]" />
+        <div className="absolute bottom-[-18rem] right-[-12rem] h-[32rem] w-[32rem] rounded-full bg-emerald-500/5 blur-[120px]" />
+      </div>
+
+      <div className="relative mx-auto w-full max-w-6xl">
+        <header className="flex flex-col items-center text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-red-400/20 bg-red-500/10 px-3.5 py-1.5 text-xs font-semibold tracking-wide text-red-300 shadow-[0_0_30px_rgba(248,113,113,0.08)]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-400" />
+            EMERGENCY RESPONSE PLATFORM
+          </div>
+
+          <h1 className="mt-7 text-4xl font-bold tracking-tight text-white sm:text-6xl">
             Rescue Studio
           </h1>
-          <p className="mx-auto mt-4 max-w-xl text-lg text-slate-400">
+
+          <p className="mt-4 text-base text-slate-300 sm:text-lg">
             แพลตฟอร์มสร้างระบบแจ้งเหตุฉุกเฉินผ่าน QR Code
           </p>
-        </div>
 
-        {/* Module hub */}
-        <div className="mt-14 grid gap-4 sm:grid-cols-3">
-          {modules.map((mod) => {
-            const accent = accentStyles[mod.accent];
-            return (
-              <Link
-                key={mod.href}
-                href={mod.href}
-                className={`group rounded-2xl border border-gray-800 bg-gray-900/60 p-6 backdrop-blur-sm ring-1 ring-transparent transition ${accent.ring} hover:bg-gray-900`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`h-1.5 w-1.5 rounded-full ${accent.dot}`} />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    {mod.label}
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500 sm:text-base">
+            พื้นที่จำลองและจัดการระบบแจ้งเหตุฉุกเฉินผ่าน QR Code
+            สำหรับทีมปฏิบัติการและการทดสอบหน้างาน
+          </p>
+        </header>
+
+        <section
+          aria-labelledby="staff-hub-heading"
+          className="mt-12 rounded-3xl border border-slate-800/90 bg-slate-900/55 p-4 shadow-2xl shadow-black/20 backdrop-blur-xl sm:p-6"
+        >
+          <div className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300 ring-1 ring-amber-300/20">
+                <ShieldIcon />
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 id="staff-hub-heading" className="font-semibold text-white">
+                    สำหรับเจ้าหน้าที่
+                  </h2>
+                  <span className="rounded-full bg-amber-300/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200">
+                    ต้องเข้าสู่ระบบก่อน
                   </span>
                 </div>
-                <h2 className={`mt-3 text-xl font-bold ${accent.text}`}>{mod.title}</h2>
-                <p className="mt-2 text-sm text-gray-400">{mod.description}</p>
-                <span className="mt-4 inline-block text-sm text-gray-500 transition group-hover:text-gray-300">
-                  เปิดหน้านี้ &rarr;
-                </span>
-              </Link>
-            );
-          })}
-        </div>
+                <p className="mt-1 text-sm leading-6 text-slate-400">
+                  กรุณาเข้าสู่ระบบก่อนเข้าใช้งาน Dashboard และการจัดการ QR Code
+                </p>
+              </div>
+            </div>
 
-        {/* Active SOS points — live from Supabase */}
-        <div className="mt-16 rounded-2xl border border-gray-800 bg-gray-900/40 p-6 backdrop-blur-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-              จุดแจ้งเหตุที่ใช้งานอยู่
-            </h3>
+            <span className="inline-flex w-fit items-center gap-2 rounded-full border border-slate-700/80 bg-slate-950/40 px-3 py-1.5 text-xs text-slate-400">
+              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+              ระบบพร้อมใช้งาน
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            {staffModules.map((module) => {
+              const style = moduleStyles[module.accent];
+              const Icon = module.accent === 'blue' ? DashboardIcon : QRIcon;
+
+              return (
+                <Link
+                  key={module.href}
+                  href={module.href}
+                  className={`group relative overflow-hidden rounded-2xl border border-slate-800 bg-[#0a1020]/80 p-5 transition duration-300 hover:-translate-y-0.5 ${style.border}`}
+                >
+                  <div
+                    className={`pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full blur-2xl transition duration-300 ${style.glow}`}
+                  />
+
+                  <div className="relative">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${style.icon}`}>
+                        <Icon />
+                      </div>
+                      <ArrowUpRightIcon className="h-5 w-5 text-slate-600 transition group-hover:text-white" />
+                    </div>
+
+                    <p className={`mt-7 text-xs font-semibold tracking-[0.14em] ${style.label}`}>
+                      {module.eyebrow}
+                    </p>
+                    <h3 className="mt-2 text-xl font-bold text-white">{module.title}</h3>
+                    <p className="mt-2 min-h-12 text-sm leading-6 text-slate-400">
+                      {module.description}
+                    </p>
+
+                    <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-slate-300 transition group-hover:text-white">
+                      เปิดเครื่องมือ
+                      <ArrowUpRightIcon />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+
+            <Link
+              href="/login"
+              className="group relative overflow-hidden rounded-2xl border border-red-400/20 bg-gradient-to-br from-red-500/15 via-[#151021] to-[#0a1020] p-5 transition duration-300 hover:-translate-y-0.5 hover:border-red-400/45"
+            >
+              <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-red-500/15 blur-3xl transition group-hover:bg-red-500/25" />
+
+              <div className="relative flex h-full flex-col">
+                <div className="flex items-start justify-between">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/15 text-red-300 ring-1 ring-red-400/20">
+                    <ShieldIcon />
+                  </div>
+                  <ArrowUpRightIcon className="h-5 w-5 text-red-300/60 transition group-hover:text-red-200" />
+                </div>
+
+                <p className="mt-7 text-xs font-semibold tracking-[0.14em] text-red-300">
+                  STAFF ACCESS
+                </p>
+                <h3 className="mt-2 text-xl font-bold text-white">เข้าสู่ระบบ</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  ยืนยันสิทธิ์ของคุณเพื่อเริ่มใช้งานเครื่องมือสำหรับเจ้าหน้าที่
+                </p>
+
+                <span className="mt-5 inline-flex w-fit items-center gap-2 rounded-xl bg-red-400 px-3.5 py-2 text-sm font-bold text-red-950 transition group-hover:bg-red-300">
+                  เข้าสู่ระบบ
+                  <ArrowUpRightIcon />
+                </span>
+              </div>
+            </Link>
+          </div>
+        </section>
+
+        <section
+          aria-labelledby="active-points-heading"
+          className="mt-6 rounded-3xl border border-slate-800/90 bg-slate-900/45 p-4 shadow-2xl shadow-black/20 backdrop-blur-xl sm:p-6"
+        >
+          <div className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+                </span>
+                <h2 id="active-points-heading" className="font-semibold text-white">
+                  จุดแจ้งเหตุที่ใช้งานอยู่
+                </h2>
+              </div>
+              <p className="mt-2 text-sm text-slate-400">
+                เลือกจุดเพื่อเปิดหน้าจำลองการแจ้งเหตุและทดสอบประสบการณ์ผู้ใช้งาน
+              </p>
+            </div>
+
             {status === 'ready' && (
-              <span className="text-xs text-gray-600">{points.length} จุด</span>
+              <div className="flex w-fit items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-500/10 px-3 py-1.5 text-sm font-semibold text-emerald-200">
+                <span>{points.length}</span>
+                <span className="font-normal text-emerald-200/70">จุดพร้อมใช้งาน</span>
+              </div>
             )}
           </div>
 
-          {status === 'loading' && (
-            <div className="space-y-2">
-              <div className="h-12 animate-pulse rounded-lg bg-gray-800" />
-              <div className="h-12 animate-pulse rounded-lg bg-gray-800" />
-            </div>
-          )}
+          <div className="mt-4">
+            {status === 'loading' && (
+              <div className="grid gap-3">
+                {[0, 1, 2].map((item) => (
+                  <div
+                    key={item}
+                    className="h-[86px] animate-pulse rounded-2xl border border-slate-800 bg-slate-800/40"
+                  />
+                ))}
+              </div>
+            )}
 
-          {status === 'error' && (
-            <p className="text-sm text-gray-500">
-              ไม่สามารถดึงรายการจุดแจ้งเหตุได้ในขณะนี้
-            </p>
-          )}
+            {status === 'error' && (
+              <div className="rounded-2xl border border-red-400/15 bg-red-500/5 px-5 py-7 text-center">
+                <p className="font-medium text-slate-200">
+                  ไม่สามารถดึงรายการจุดแจ้งเหตุได้ในขณะนี้
+                </p>
+                <p className="mt-1 text-sm text-slate-500">กรุณาลองใหม่อีกครั้งในภายหลัง</p>
+              </div>
+            )}
 
-          {status === 'ready' && points.length === 0 && (
-            <p className="text-sm text-gray-500">
-              ยังไม่มีจุด QR ที่เปิดใช้งาน ไปสร้างจุดแรกได้ที่{' '}
-              <Link href="/dashboard/points" className="text-blue-400 underline">
-                จัดการ QR Code
-              </Link>
-            </p>
-          )}
+            {status === 'ready' && points.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/30 px-5 py-8 text-center">
+                <p className="font-medium text-slate-200">ยังไม่มีจุด QR ที่เปิดใช้งาน</p>
+                <p className="mt-1 text-sm text-slate-500">
+                  เริ่มต้นสร้างจุดแจ้งเหตุแรกสำหรับการทดสอบของคุณ
+                </p>
+                <Link
+                  href="/dashboard/points"
+                  className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-300 transition hover:text-blue-200"
+                >
+                  ไปที่จัดการ QR Code
+                  <ArrowUpRightIcon />
+                </Link>
+              </div>
+            )}
 
-          {status === 'ready' && points.length > 0 && (
-            <ul className="divide-y divide-gray-800">
-              {points.map((point) => (
-                <li key={point.id} className="flex items-center justify-between gap-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium text-white">{point.name}</p>
-                    <p className="truncate text-xs font-mono text-gray-500">{point.zone}</p>
-                  </div>
-                  <Link
-                    href={`/sos/${point.id}`}
-                    className="shrink-0 rounded-lg bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-300 transition hover:bg-gray-700"
+            {status === 'ready' && points.length > 0 && (
+              <ul className="grid gap-3">
+                {points.map((point) => (
+                  <li
+                    key={point.id}
+                    className="group rounded-2xl border border-slate-800 bg-slate-950/35 p-4 transition hover:border-slate-700 hover:bg-slate-900/80"
                   >
-                    จำลองการแจ้งเหตุ
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <span
+                          role="img"
+                          aria-label="จุดแจ้งเหตุ"
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-lg ring-1 ring-red-400/15"
+                        >
+                          📍
+                        </span>
+
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-white">{point.name}</p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                            <p className="truncate font-mono text-xs text-slate-500">
+                              {point.zone || 'ไม่ได้ระบุโซน'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Link
+                        href={`/sos/${point.id}`}
+                        className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-2.5 text-sm font-semibold text-blue-200 transition hover:border-blue-400/40 hover:bg-blue-500/20 hover:text-white"
+                      >
+                        จำลองการแจ้งเหตุ
+                        <ArrowUpRightIcon />
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        <p className="mt-7 text-center text-xs text-slate-600">
+          Rescue Studio · QR Emergency Response Simulation
+        </p>
       </div>
     </main>
   );

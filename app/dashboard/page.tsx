@@ -1,4 +1,5 @@
 'use client';
+
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
@@ -21,11 +22,31 @@ type Incident = {
   incident_actions: IncidentAction[];
 };
 
-// ---- ค่าคงที่ / helper ที่ใช้ร่วมกันหลายจุด (กันเขียนซ้ำ, สีตรงกันทั้งหน้า) ----
-const STATUS_META: Record<string, { label: string; dot: string; text: string; bg: string }> = {
-  pending: { label: 'รอดำเนินการ', dot: 'bg-red-500', text: 'text-red-400', bg: 'bg-red-500/10' },
-  in_progress: { label: 'กำลังทำ', dot: 'bg-yellow-500', text: 'text-yellow-400', bg: 'bg-yellow-500/10' },
-  resolved: { label: 'เสร็จสิ้น', dot: 'bg-green-500', text: 'text-green-400', bg: 'bg-green-500/10' },
+const STATUS_META: Record<
+  string,
+  { label: string; dot: string; text: string; bg: string; border: string }
+> = {
+  pending: {
+    label: 'รอดำเนินการ',
+    dot: 'bg-red-400',
+    text: 'text-red-200',
+    bg: 'bg-red-500/10',
+    border: 'border-red-400/20',
+  },
+  in_progress: {
+    label: 'กำลังดำเนินการ',
+    dot: 'bg-amber-400',
+    text: 'text-amber-200',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-400/20',
+  },
+  resolved: {
+    label: 'เสร็จสิ้น',
+    dot: 'bg-emerald-400',
+    text: 'text-emerald-200',
+    bg: 'bg-emerald-500/10',
+    border: 'border-emerald-400/20',
+  },
 };
 
 const QUICK_ACTIONS: { type: string; label: string; icon: string }[] = [
@@ -36,7 +57,7 @@ const QUICK_ACTIONS: { type: string; label: string; icon: string }[] = [
 ];
 
 function actionMeta(type: string) {
-  const found = QUICK_ACTIONS.find((a) => a.type === type);
+  const found = QUICK_ACTIONS.find((action) => action.type === type);
   if (found) return found;
   return { type, label: 'บันทึกโน้ต', icon: '📝' };
 }
@@ -44,15 +65,17 @@ function actionMeta(type: string) {
 function StatusBadge({ status }: { status: string }) {
   const meta = STATUS_META[status] ?? {
     label: status,
-    dot: 'bg-gray-500',
-    text: 'text-gray-400',
-    bg: 'bg-gray-500/10',
+    dot: 'bg-slate-400',
+    text: 'text-slate-300',
+    bg: 'bg-slate-500/10',
+    border: 'border-slate-400/20',
   };
+
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold whitespace-nowrap ${meta.bg} ${meta.text}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold whitespace-nowrap ${meta.bg} ${meta.text} ${meta.border}`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
       {meta.label}
     </span>
   );
@@ -61,10 +84,13 @@ function StatusBadge({ status }: { status: string }) {
 function timeAgo(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diffMs / 60000);
+
   if (min < 1) return 'เมื่อสักครู่';
   if (min < 60) return `${min} นาทีที่แล้ว`;
+
   const hr = Math.floor(min / 60);
   if (hr < 24) return `${hr} ชม.ที่แล้ว`;
+
   return new Date(iso).toLocaleString('th-TH');
 }
 
@@ -77,12 +103,10 @@ export default function DashboardPage() {
   const [handledBy, setHandledBy] = useState('');
   const [note, setNote] = useState('');
   const [selectedActionType, setSelectedActionType] = useState<string | null>(null);
-  const [addingAction, setAddingAction] = useState(false); // opt-in ให้แก้ไข action ต่อ แม้เคสจะพ้น pending แล้ว
+  const [addingAction, setAddingAction] = useState(false);
   const [savingAction, setSavingAction] = useState(false);
   const router = useRouter();
 
-  // เปิด modal ของเคสหนึ่งๆ พร้อมล้างฟอร์มค้างของเคสก่อนหน้าเสมอ
-  // (handledBy ไม่ล้าง เพราะอยากให้จำชื่อผู้ดำเนินการข้ามเคสไว้ เป็น convenience)
   const openCase = (incident: Incident) => {
     setSelected(incident);
     setAddingAction(false);
@@ -90,13 +114,12 @@ export default function DashboardPage() {
     setNote('');
   };
 
-  // ดึง incidents พร้อม "join" ประวัติ action ของแต่ละเคสมาในคำสั่งเดียว
-  // (กัน N+1 query — ถ้าแยกยิง fetch ประวัติทีละเคสจะช้ามากเมื่อเคสเยอะขึ้น)
   const fetchIncidents = useCallback(async () => {
     const { data, error } = await supabase
       .from('incidents')
       .select('*, incident_actions(id, action_type, handled_by, note, created_at)')
       .order('created_at', { ascending: false });
+
     if (error) console.error('Fetch incidents error:', error);
     if (data) setIncidents(data as unknown as Incident[]);
     setLoading(false);
@@ -111,6 +134,7 @@ export default function DashboardPage() {
 
     const savedName =
       typeof window !== 'undefined' ? window.localStorage.getItem('admin_handled_by') : '';
+
     if (savedName) setHandledBy(savedName);
 
     const incidentsChannel = supabase
@@ -133,303 +157,479 @@ export default function DashboardPage() {
     };
   }, [fetchIncidents]);
 
-  // ปิด modal ด้วยปุ่ม Esc (มาตรฐาน UX ของ dialog ทั่วไป)
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelected(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelected(null);
     };
+
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // ถ้า modal เปิดอยู่ และข้อมูล incidents ถูก refetch (realtime) ให้ sync ตัวที่เปิดอยู่ด้วย
   useEffect(() => {
     if (selected) {
-      const updated = incidents.find((i) => i.id === selected.id);
+      const updated = incidents.find((incident) => incident.id === selected.id);
       if (updated) setSelected(updated);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incidents]);
 
   const total = incidents.length;
-  const pending = incidents.filter((i) => i.status === 'pending').length;
-  const inProgress = incidents.filter((i) => i.status === 'in_progress').length;
-  const resolved = incidents.filter((i) => i.status === 'resolved').length;
+  const pending = incidents.filter((incident) => incident.status === 'pending').length;
+  const inProgress = incidents.filter((incident) => incident.status === 'in_progress').length;
+  const resolved = incidents.filter((incident) => incident.status === 'resolved').length;
 
-  const filteredIncidents = incidents.filter((i) => i.status === filter);
+  const filteredIncidents = incidents.filter((incident) => incident.status === filter);
 
-  const searchedAll = incidents.filter((i) => {
+  const searchedAll = incidents.filter((incident) => {
     if (!search.trim()) return true;
-    const q = search.toLowerCase();
+    const query = search.toLowerCase();
+
     return (
-      i.incident_type.toLowerCase().includes(q) ||
-      (i.description || '').toLowerCase().includes(q)
+      incident.incident_type.toLowerCase().includes(query) ||
+      (incident.description || '').toLowerCase().includes(query)
     );
   });
 
   const latestAction = (incident: Incident) => {
     if (!incident.incident_actions?.length) return null;
+
     return [...incident.incident_actions].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )[0];
   };
 
-  // รวม action ทุกเคสเป็น feed เดียว เรียงเวลาล่าสุดก่อน — คือ "สรุป log" ที่ขอมา
   const recentActivity = incidents
-    .flatMap((i) => (i.incident_actions || []).map((a) => ({ ...a, incident: i })))
+    .flatMap((incident) =>
+      (incident.incident_actions || []).map((action) => ({ ...action, incident }))
+    )
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     .slice(0, 15);
 
-  // เคสยัง pending = ทำงานอยู่ ให้ log action ได้เลย
-  // เคสพ้น pending แล้ว = ล็อกเป็นสรุป เว้นแต่ผู้ใช้กด "+ เพิ่มบันทึก" ยืนยันเจตนาก่อน
   const canActNow = !!selected && (selected.status === 'pending' || addingAction);
 
-  // บันทึกจริงแค่จุดเดียว ถูกเรียกจากปุ่ม "บันทึกการดำเนินการ" เท่านั้น
-  // (แยกจากการ "เลือก" ประเภท action เพื่อกัน insert ซ้ำจากการกดพลาด)
   const handleSaveAction = async () => {
     if (!selected || !selectedActionType || savingAction) return;
+
     if (!handledBy.trim()) {
       alert('กรุณาระบุชื่อผู้ดำเนินการก่อนบันทึก');
       return;
     }
+
     setSavingAction(true);
+
     const { error } = await supabase.from('incident_actions').insert({
       incident_id: selected.id,
       action_type: selectedActionType,
       handled_by: handledBy.trim(),
       note: note.trim() || null,
     });
+
     setSavingAction(false);
+
     if (error) {
       alert('บันทึก action ไม่สำเร็จ: ' + error.message);
       return;
     }
+
     window.localStorage.setItem('admin_handled_by', handledBy.trim());
     setNote('');
     setSelectedActionType(null);
     setAddingAction(false);
-    setSelected(null); // บันทึกสำเร็จ -> ปิดหน้าต่างไปเลย (เปลี่ยนสถานะทำที่การ์ดด้านนอกแทน)
+    setSelected(null);
   };
 
+  const summaryCards = [
+    {
+      label: 'ทั้งหมด',
+      value: total,
+      icon: '◈',
+      accent: 'text-white',
+      iconStyle: 'bg-slate-700/70 text-slate-200',
+      line: 'bg-slate-400',
+    },
+    {
+      label: 'รอรับเรื่อง',
+      value: pending,
+      icon: '!',
+      accent: 'text-red-300',
+      iconStyle: 'bg-red-500/15 text-red-300',
+      line: 'bg-red-400',
+    },
+    {
+      label: 'กำลังดำเนินการ',
+      value: inProgress,
+      icon: '↗',
+      accent: 'text-amber-300',
+      iconStyle: 'bg-amber-500/15 text-amber-300',
+      line: 'bg-amber-400',
+    },
+    {
+      label: 'ปิดเคสแล้ว',
+      value: resolved,
+      icon: '✓',
+      accent: 'text-emerald-300',
+      iconStyle: 'bg-emerald-500/15 text-emerald-300',
+      line: 'bg-emerald-400',
+    },
+  ];
+
+  const filterTabs = [
+    {
+      id: 'pending',
+      label: 'รอดำเนินการ',
+      count: pending,
+      dot: 'bg-red-400',
+      active: 'border-red-400/30 bg-red-500/10 text-red-200',
+    },
+    {
+      id: 'in_progress',
+      label: 'กำลังดำเนินการ',
+      count: inProgress,
+      dot: 'bg-amber-400',
+      active: 'border-amber-400/30 bg-amber-500/10 text-amber-200',
+    },
+    {
+      id: 'resolved',
+      label: 'เสร็จสิ้น',
+      count: resolved,
+      dot: 'bg-emerald-400',
+      active: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200',
+    },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6">
-      {/* Navigation Bar */}
-      <nav className="flex justify-between items-center mb-8 bg-gray-900 p-4 rounded-xl border border-gray-800">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold">🛡️ ระบบติดตามเหตุฉุกเฉิน</h1>
-          <span className="inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-800/70 px-2.5 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            เชื่อมต่อสด
-          </span>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link
-            href="/dashboard/points"
-            className="bg-blue-600 px-4 py-2 rounded-lg font-bold hover:bg-blue-500"
-          >
-            📍 จัดการจุด QR
-          </Link>
-          <button
-            onClick={() => {
-              supabase.auth.signOut();
-              router.push('/login');
-            }}
-            className="text-red-400 underline"
-          >
-            ออกจากระบบ
-          </button>
-        </div>
-      </nav>
+    <main className="relative min-h-screen overflow-hidden bg-[#050914] px-4 py-5 text-white sm:px-6 sm:py-7">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:48px_48px]" />
+        <div className="absolute left-[-14rem] top-[-14rem] h-[35rem] w-[35rem] rounded-full bg-blue-500/10 blur-[140px]" />
+        <div className="absolute right-[-15rem] top-[20rem] h-[32rem] w-[32rem] rounded-full bg-red-500/5 blur-[140px]" />
+      </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        {[
-          { label: 'ทั้งหมด', val: total, color: 'text-white', icon: '🗂️' },
-          { label: 'รอรับเรื่อง', val: pending, color: 'text-red-400', icon: '🔴' },
-          { label: 'กำลังทำ', val: inProgress, color: 'text-yellow-400', icon: '🟡' },
-          { label: 'ปิดเคสแล้ว', val: resolved, color: 'text-green-400', icon: '🟢' },
-        ].map((item, idx) => (
-          <div
-            key={idx}
-            className="bg-gray-900 p-4 rounded-xl border border-gray-800 hover:border-gray-700 transition"
-          >
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-sm text-gray-400">{item.label}</p>
-              <span className="text-base opacity-70">{item.icon}</span>
+      <div className="relative mx-auto w-full max-w-7xl">
+        <nav className="flex flex-col gap-4 rounded-2xl border border-slate-800/90 bg-slate-900/65 p-4 shadow-xl shadow-black/20 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:p-5">
+  <div className="flex min-w-0 items-center gap-3">
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-500/10 text-xl text-blue-200">
+      🛡️
+    </div>
+
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <h1 className="text-sm font-black tracking-[0.12em] text-white">
+          RESCUE STUDIO
+        </h1>
+
+        <span className="text-[10px] font-semibold tracking-[0.16em] text-blue-300">
+          CONSOLE CENTER
+        </span>
+
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/15 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-200">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
+          เชื่อมต่อสด
+        </span>
+      </div>
+
+      <p className="mt-1 text-xs text-slate-400">ระบบติดตามเหตุฉุกเฉิน</p>
+    </div>
+  </div>
+
+  <div className="flex items-center gap-2 sm:gap-3">
+    <Link
+      href="/dashboard/points"
+      className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-blue-400/20 bg-blue-500/10 px-3.5 py-2.5 text-sm font-semibold text-blue-200 transition hover:border-blue-400/40 hover:bg-blue-500/20 hover:text-white sm:flex-none"
+    >
+      <span>📍</span>
+      จัดการจุด QR
+    </Link>
+
+    <button
+      onClick={() => {
+        supabase.auth.signOut();
+        router.push('/login');
+      }}
+      className="rounded-xl px-3.5 py-2.5 text-sm font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200"
+    >
+      ออกจากระบบ
+    </button>
+  </div>
+</nav>
+
+        <section className="mt-6">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold tracking-[0.16em] text-slate-500">
+                OPERATIONAL OVERVIEW
+              </p>
+              <h2 className="mt-1 text-xl font-bold text-white">ภาพรวมเหตุการณ์</h2>
             </div>
-            <p className={`text-3xl font-bold ${item.color}`}>{item.val}</p>
+            <p className="text-sm text-slate-500">อัปเดตสถานะเหตุการณ์แบบเรียลไทม์</p>
           </div>
-        ))}
-      </div>
 
-      {/* Filter Tabs (มีจำนวนกำกับแต่ละแท็บ) */}
-      <div className="flex gap-2 mb-6 bg-gray-900 p-1 rounded-lg border border-gray-800">
-        {[
-          { id: 'pending', label: '🔴 รอดำเนินการ', count: pending },
-          { id: 'in_progress', label: '🟡 กำลังทำ', count: inProgress },
-          { id: 'resolved', label: '🟢 เสร็จสิ้น', count: resolved },
-        ].map((s) => (
-          <button
-            key={s.id}
-            onClick={() => setFilter(s.id)}
-            className={`flex-1 py-2 rounded-md font-bold transition flex items-center justify-center gap-2 ${
-              filter === s.id ? 'bg-blue-600' : 'hover:bg-gray-800'
-            }`}
-          >
-            {s.label}
-            <span
-              className={`text-xs px-1.5 py-0.5 rounded-full ${
-                filter === s.id ? 'bg-white/20' : 'bg-gray-800'
-              }`}
-            >
-              {s.count}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      {/* รายการเหตุการณ์ (work queue ที่ filter ตาม tab) */}
-      <div className="flex flex-col gap-4 mb-10">
-        {loading ? (
-          <p className="text-center text-gray-500 py-10">กำลังโหลด...</p>
-        ) : filteredIncidents.length === 0 ? (
-          <p className="text-center text-gray-500 py-10">ไม่พบข้อมูลในหมวดนี้</p>
-        ) : (
-          filteredIncidents.map((i) => {
-            const last = latestAction(i);
-            return (
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {summaryCards.map((item) => (
               <div
-                key={i.id}
-                className="bg-gray-900 p-6 rounded-xl border-l-4 border-blue-500 flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 shadow-lg w-full"
+                key={item.label}
+                className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg shadow-black/10 backdrop-blur-sm transition hover:-translate-y-0.5 hover:border-slate-700"
               >
-                <div className="flex-1 min-w-0">
-                  <p className="text-xl font-bold mb-1 text-white">
-                    {i.status === 'pending' ? (
-                      <span className="text-red-500">⚠️ NEW! ฉุกเฉิน!</span>
-                    ) : (
-                      i.incident_type
-                    )}
-                  </p>
-                  <p className="text-gray-300 mb-3 break-words">{i.description}</p>
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-                    <span>{new Date(i.created_at).toLocaleString('th-TH')}</span>
-                    {last && (
-                      <span className="inline-flex items-center gap-1 bg-gray-800/70 px-2 py-0.5 rounded-full">
-                        {actionMeta(last.action_type).icon} {actionMeta(last.action_type).label} โดย{' '}
-                        {last.handled_by}
-                      </span>
-                    )}
-                  </div>
+                <div className={`absolute left-0 top-0 h-0.5 w-full ${item.line}`} />
+
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium text-slate-400">{item.label}</p>
+                  <span
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold ${item.iconStyle}`}
+                  >
+                    {item.icon}
+                  </span>
                 </div>
 
-                <div className="flex gap-2 shrink-0">
-                  <button
-                    onClick={() => openCase(i)}
-                    className="bg-gray-800 px-4 py-2 rounded-lg font-bold text-sm hover:bg-gray-700"
-                  >
-                    {i.status === 'pending' ? 'ดำเนินการ' : 'ดูสรุป'}
-                  </button>
-                  {i.status === 'pending' && (
-                    <button
-                      onClick={() => updateStatus(i.id, 'in_progress')}
-                      className="bg-yellow-600 px-4 py-2 rounded-lg font-bold text-sm hover:bg-yellow-500"
-                    >
-                      รับเรื่อง
-                    </button>
-                  )}
-                  {i.status !== 'resolved' && (
-                    <button
-                      onClick={() => updateStatus(i.id, 'resolved')}
-                      className="bg-green-700 px-4 py-2 rounded-lg font-bold text-sm hover:bg-green-600"
-                    >
-                      ปิดเคส
-                    </button>
-                  )}
-                </div>
+                <p className={`mt-5 text-3xl font-bold tracking-tight ${item.accent}`}>
+                  {item.value}
+                </p>
+                <p className="mt-1 text-xs text-slate-600">เหตุการณ์ในระบบ</p>
               </div>
-            );
-          })
-        )}
-      </div>
+            ))}
+          </div>
+        </section>
 
-      {/* ---- ด้านล่าง: log สรุป + เคสทั้งหมดที่ไม่ filter ---- */}
-      <div className="grid lg:grid-cols-2 gap-6 pb-10">
-        {/* Activity feed: ใคร ทำอะไร เมื่อไหร่ กับเคสไหน */}
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
-          <h2 className="font-bold mb-4 flex items-center gap-2">📜 Log ล่าสุด</h2>
-          {recentActivity.length === 0 ? (
-            <p className="text-sm text-gray-500 py-6 text-center">ยังไม่มีการบันทึก action</p>
-          ) : (
-            <div className="flex flex-col gap-3 max-h-[420px] overflow-y-auto pr-1">
-              {recentActivity.map((a) => {
-                const meta = actionMeta(a.action_type);
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-start gap-3 text-sm border-b border-gray-800 pb-3 last:border-0"
+        <section className="mt-7">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-2 shadow-xl shadow-black/10 backdrop-blur-sm">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {filterTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setFilter(tab.id)}
+                  className={`flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                    filter === tab.id
+                      ? tab.active
+                      : 'border-transparent text-slate-400 hover:bg-slate-800/70 hover:text-slate-200'
+                  }`}
+                >
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${tab.dot}`} />
+                  <span>{tab.label}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs ${
+                      filter === tab.id ? 'bg-white/10' : 'bg-slate-800 text-slate-500'
+                    }`}
                   >
-                    <span className="text-lg leading-none">{meta.icon}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-gray-200">
-                        <span className="font-bold">{a.handled_by}</span> {meta.label}
-                        <span className="text-gray-500"> · {a.incident.incident_type}</span>
-                      </p>
-                      {a.note && <p className="text-gray-500 truncate">{a.note}</p>}
-                      <p className="text-[11px] text-gray-600 mt-0.5">{timeAgo(a.created_at)}</p>
-                    </div>
-                  </div>
-                );
-              })}
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        </section>
 
-        {/* ตารางเคสทั้งหมด ไม่ผูกกับ filter ด้านบน */}
-        <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
-          <div className="flex items-center justify-between mb-4 gap-3">
-            <h2 className="font-bold flex items-center gap-2">🗂️ เคสทั้งหมด ({searchedAll.length})</h2>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ค้นหา..."
-              className="text-sm bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 w-32 sm:w-48"
-            />
+        <section className="mt-6">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-semibold tracking-[0.16em] text-slate-500">INCIDENT QUEUE</p>
+              <h2 className="mt-1 text-xl font-bold text-white">รายการเหตุการณ์</h2>
+            </div>
+            {!loading && (
+              <p className="text-sm text-slate-500">
+                แสดง <span className="font-semibold text-slate-300">{filteredIncidents.length}</span> รายการ
+              </p>
+            )}
           </div>
-          <div className="max-h-[420px] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-gray-900">
-                <tr className="text-left text-gray-500 text-xs uppercase tracking-wide">
-                  <th className="pb-2 font-semibold">เหตุการณ์</th>
-                  <th className="pb-2 font-semibold">สถานะ</th>
-                  <th className="pb-2 font-semibold text-right">เวลา</th>
-                </tr>
-              </thead>
-              <tbody>
-                {searchedAll.map((i) => (
-                  <tr
-                    key={i.id}
-                    onClick={() => openCase(i)}
-                    className="cursor-pointer border-t border-gray-800/70 hover:bg-gray-800/50"
-                  >
-                    <td className="py-2.5 pr-2 max-w-[160px] truncate">{i.incident_type}</td>
-                    <td className="py-2.5">
-                      <StatusBadge status={i.status} />
-                    </td>
-                    <td className="py-2.5 text-right text-gray-500 text-xs whitespace-nowrap">
-                      {timeAgo(i.created_at)}
-                    </td>
-                  </tr>
+
+          <div className="flex flex-col gap-3">
+            {loading ? (
+              <div className="grid gap-3">
+                {[0, 1, 2].map((item) => (
+                  <div
+                    key={item}
+                    className="h-36 animate-pulse rounded-2xl border border-slate-800 bg-slate-900/40"
+                  />
                 ))}
-              </tbody>
-            </table>
+              </div>
+            ) : filteredIncidents.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/35 px-5 py-14 text-center">
+                <span className="text-3xl">◌</span>
+                <p className="mt-3 font-semibold text-slate-300">ไม่พบข้อมูลในหมวดนี้</p>
+                <p className="mt-1 text-sm text-slate-500">เมื่อมีเหตุการณ์ใหม่ ระบบจะแสดงที่นี่</p>
+              </div>
+            ) : (
+              filteredIncidents.map((incident) => {
+                const last = latestAction(incident);
+                const statusAccent =
+                  incident.status === 'pending'
+                    ? 'border-l-red-400'
+                    : incident.status === 'in_progress'
+                      ? 'border-l-amber-400'
+                      : 'border-l-emerald-400';
+
+                return (
+                  <article
+                    key={incident.id}
+                    className={`rounded-2xl border border-slate-800 border-l-4 bg-slate-900/60 p-5 shadow-lg shadow-black/10 backdrop-blur-sm transition hover:border-slate-700 ${statusAccent}`}
+                  >
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <StatusBadge status={incident.status} />
+                          <span className="text-xs text-slate-500">{timeAgo(incident.created_at)}</span>
+                        </div>
+
+                        <h3 className="mt-3 text-lg font-bold text-white">
+                          {incident.status === 'pending' ? (
+                            <span className="text-red-300">⚠️ NEW! ฉุกเฉิน!</span>
+                          ) : (
+                            incident.incident_type
+                          )}
+                        </h3>
+
+                        <p className="mt-2 break-words text-sm leading-6 text-slate-300">
+                          {incident.description}
+                        </p>
+
+                        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span className="rounded-full border border-slate-700 bg-slate-950/40 px-2.5 py-1">
+                            {new Date(incident.created_at).toLocaleString('th-TH')}
+                          </span>
+
+                          {last && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-950/40 px-2.5 py-1">
+                              <span>{actionMeta(last.action_type).icon}</span>
+                              {actionMeta(last.action_type).label} โดย {last.handled_by}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 lg:w-auto lg:justify-end">
+                        <button
+                          onClick={() => openCase(incident)}
+                          className="rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-sm font-bold text-slate-200 transition hover:border-slate-600 hover:bg-slate-700"
+                        >
+                          {incident.status === 'pending' ? 'ดำเนินการ' : 'ดูสรุป'}
+                        </button>
+
+                        {incident.status === 'pending' && (
+                          <button
+                            onClick={() => updateStatus(incident.id, 'in_progress')}
+                            className="rounded-xl border border-amber-400/20 bg-amber-500/15 px-4 py-2.5 text-sm font-bold text-amber-200 transition hover:bg-amber-500/25"
+                          >
+                            รับเรื่อง
+                          </button>
+                        )}
+
+                        {incident.status !== 'resolved' && (
+                          <button
+                            onClick={() => updateStatus(incident.id, 'resolved')}
+                            className="rounded-xl border border-emerald-400/20 bg-emerald-500/15 px-4 py-2.5 text-sm font-bold text-emerald-200 transition hover:bg-emerald-500/25"
+                          >
+                            ปิดเคส
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })
+            )}
           </div>
-        </div>
+        </section>
+
+        <section className="mt-8 grid gap-6 pb-8 lg:grid-cols-2">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-black/10 backdrop-blur-sm">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.16em] text-slate-500">ACTIVITY LOG</p>
+                <h2 className="mt-1 font-bold text-white">Log ล่าสุด</h2>
+              </div>
+              <span className="rounded-full border border-slate-700 bg-slate-950/40 px-2.5 py-1 text-xs text-slate-500">
+                {recentActivity.length} รายการ
+              </span>
+            </div>
+
+            {recentActivity.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-sm text-slate-500">ยังไม่มีการบันทึก action</p>
+              </div>
+            ) : (
+              <div className="mt-4 flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1">
+                {recentActivity.map((action) => {
+                  const meta = actionMeta(action.action_type);
+
+                  return (
+                    <div
+                      key={action.id}
+                      className="flex items-start gap-3 rounded-xl border border-transparent p-2 transition hover:border-slate-800 hover:bg-slate-950/30"
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-800 text-base">
+                        {meta.icon}
+                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm leading-6 text-slate-300">
+                          <span className="font-bold text-white">{action.handled_by}</span> {meta.label}
+                          <span className="text-slate-500"> · {action.incident.incident_type}</span>
+                        </p>
+
+                        {action.note && <p className="truncate text-sm text-slate-500">{action.note}</p>}
+
+                        <p className="mt-1 text-[11px] text-slate-600">{timeAgo(action.created_at)}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 shadow-xl shadow-black/10 backdrop-blur-sm">
+            <div className="flex flex-col gap-3 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.16em] text-slate-500">INCIDENT ARCHIVE</p>
+                <h2 className="mt-1 font-bold text-white">เคสทั้งหมด ({searchedAll.length})</h2>
+              </div>
+
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="ค้นหา..."
+                className="w-full rounded-xl border border-slate-700 bg-slate-950/60 px-3.5 py-2 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 sm:w-48"
+              />
+            </div>
+
+            <div className="max-h-[420px] overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-slate-900">
+                  <tr className="text-left text-[11px] font-semibold tracking-[0.12em] text-slate-500">
+                    <th className="pb-3 pt-4">เหตุการณ์</th>
+                    <th className="pb-3 pt-4">สถานะ</th>
+                    <th className="pb-3 pt-4 text-right">เวลา</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {searchedAll.map((incident) => (
+                    <tr
+                      key={incident.id}
+                      onClick={() => openCase(incident)}
+                      className="cursor-pointer border-t border-slate-800/80 transition hover:bg-slate-800/45"
+                    >
+                      <td className="max-w-[160px] truncate py-3 pr-2 font-medium text-slate-200">
+                        {incident.incident_type}
+                      </td>
+                      <td className="py-3">
+                        <StatusBadge status={incident.status} />
+                      </td>
+                      <td className="whitespace-nowrap py-3 text-right text-xs text-slate-500">
+                        {timeAgo(incident.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
       </div>
 
-      {/* ---- Modal รายละเอียด + บันทึก action ---- */}
       {selected && (
         <div
-          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#020617]/85 p-4 backdrop-blur-md"
           onClick={() => {
             setSelected(null);
             setAddingAction(false);
@@ -437,76 +637,82 @@ export default function DashboardPage() {
           }}
         >
           <div
-            className="bg-gray-900 border border-gray-800 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
-            onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-slate-700 bg-[#0b1222] p-5 shadow-2xl shadow-black/50 sm:p-6"
+            onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold">{selected.incident_type}</h3>
-                <p className="text-xs text-gray-500 mt-1">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-5">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold tracking-[0.16em] text-blue-300">INCIDENT DETAIL</p>
+                <h3 className="mt-2 break-words text-lg font-bold text-white">{selected.incident_type}</h3>
+                <p className="mt-1 text-xs text-slate-500">
                   {new Date(selected.created_at).toLocaleString('th-TH')}
                 </p>
               </div>
+
               <button
                 onClick={() => {
                   setSelected(null);
                   setAddingAction(false);
                   setSelectedActionType(null);
                 }}
-                className="text-gray-500 hover:text-white text-xl leading-none"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700 text-lg text-slate-500 transition hover:border-slate-600 hover:bg-slate-800 hover:text-white"
+                aria-label="ปิดหน้าต่าง"
               >
                 ✕
               </button>
             </div>
 
-            <div className="mb-4">
+            <div className="mt-5">
               <StatusBadge status={selected.status} />
             </div>
 
             {selected.description && (
-              <p className="text-gray-300 bg-gray-800/50 rounded-lg p-3 mb-5">
+              <p className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/45 p-4 text-sm leading-6 text-slate-300">
                 {selected.description}
               </p>
             )}
 
-            {/* ฟอร์มบันทึก action: โหมด actionable (เลือกแล้วค่อยกดบันทึก 1 ครั้ง)
-                หรือโหมดสรุป read-only เมื่อเคสพ้น pending ไปแล้วและยังไม่ได้กด "+ เพิ่มบันทึก" */}
             {canActNow ? (
-              <div className="mb-6">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+              <div className="mt-6">
+                <p className="text-xs font-semibold tracking-[0.14em] text-slate-500">
                   บันทึกการดำเนินการ
                 </p>
+
                 <input
                   value={handledBy}
-                  onChange={(e) => setHandledBy(e.target.value)}
+                  onChange={(event) => setHandledBy(event.target.value)}
                   placeholder="ชื่อผู้ดำเนินการ"
-                  className="w-full mb-2 p-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-3 w-full rounded-xl border border-slate-700 bg-slate-950/60 p-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
                 />
 
-                <p className="text-[11px] text-gray-500 mb-1.5">เลือกประเภทการดำเนินการ</p>
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  {QUICK_ACTIONS.map((a) => (
+                <p className="mb-2 mt-4 text-[11px] font-medium text-slate-500">
+                  เลือกประเภทการดำเนินการ
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                  {QUICK_ACTIONS.map((action) => (
                     <button
-                      key={a.type}
+                      key={action.type}
                       type="button"
-                      onClick={() => setSelectedActionType(a.type)}
-                      className={`flex items-center gap-2 p-2.5 rounded-lg text-sm font-bold text-left transition ${
-                        selectedActionType === a.type
-                          ? 'bg-blue-600 ring-2 ring-blue-300'
-                          : 'bg-gray-800 hover:bg-gray-700'
+                      onClick={() => setSelectedActionType(action.type)}
+                      className={`flex items-center gap-2 rounded-xl border p-3 text-left text-sm font-bold transition ${
+                        selectedActionType === action.type
+                          ? 'border-blue-400/50 bg-blue-500/20 text-blue-100 ring-2 ring-blue-400/20'
+                          : 'border-slate-700 bg-slate-800/70 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
                       }`}
                     >
-                      <span>{a.icon}</span>
-                      <span>{a.label}</span>
+                      <span>{action.icon}</span>
+                      <span>{action.label}</span>
                     </button>
                   ))}
+
                   <button
                     type="button"
                     onClick={() => setSelectedActionType('note')}
-                    className={`col-span-2 p-2.5 rounded-lg text-sm font-bold text-left transition flex items-center gap-2 ${
+                    className={`col-span-2 flex items-center gap-2 rounded-xl border p-3 text-left text-sm font-bold transition ${
                       selectedActionType === 'note'
-                        ? 'bg-blue-600 ring-2 ring-blue-300'
-                        : 'bg-gray-800 hover:bg-gray-700'
+                        ? 'border-blue-400/50 bg-blue-500/20 text-blue-100 ring-2 ring-blue-400/20'
+                        : 'border-slate-700 bg-slate-800/70 text-slate-300 hover:border-slate-600 hover:bg-slate-800'
                     }`}
                   >
                     <span>📝</span>
@@ -516,16 +722,16 @@ export default function DashboardPage() {
 
                 <textarea
                   value={note}
-                  onChange={(e) => setNote(e.target.value)}
+                  onChange={(event) => setNote(event.target.value)}
                   placeholder="หมายเหตุ (ถ้ามี)"
-                  className="w-full mb-3 p-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm h-16 outline-none focus:ring-2 focus:ring-blue-500"
+                  className="mt-3 h-20 w-full rounded-xl border border-slate-700 bg-slate-950/60 p-3 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
                 />
 
                 <button
                   type="button"
                   disabled={savingAction || !selectedActionType || !handledBy.trim()}
                   onClick={handleSaveAction}
-                  className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed py-2.5 rounded-lg font-bold text-sm"
+                  className="mt-3 w-full rounded-xl bg-blue-400 py-3 text-sm font-bold text-slate-950 transition hover:bg-blue-300 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {savingAction ? 'กำลังบันทึก...' : '💾 บันทึกการดำเนินการ'}
                 </button>
@@ -537,18 +743,16 @@ export default function DashboardPage() {
                       setAddingAction(false);
                       setSelectedActionType(null);
                     }}
-                    className="w-full text-center text-xs text-gray-500 hover:text-gray-300 underline mt-2"
+                    className="mt-3 w-full text-center text-xs text-slate-500 underline transition hover:text-slate-300"
                   >
                     ยกเลิก กลับไปดูสรุป
                   </button>
                 )}
               </div>
             ) : (
-              <div className="mb-6 bg-gray-800/40 border border-gray-800 rounded-lg p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">
-                  สรุปเหตุการณ์
-                </p>
-                <p className="text-sm text-gray-400">
+              <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/35 p-4">
+                <p className="text-xs font-semibold tracking-[0.14em] text-slate-500">สรุปเหตุการณ์</p>
+                <p className="mt-2 text-sm leading-6 text-slate-400">
                   {selected.incident_actions?.length
                     ? `เคสนี้ถูกดำเนินการไปแล้ว ${selected.incident_actions.length} รายการ ดูประวัติทั้งหมดด้านล่าง`
                     : 'ยังไม่มีการบันทึกการดำเนินการสำหรับเคสนี้'}
@@ -556,35 +760,46 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setAddingAction(true)}
-                  className="text-sm text-blue-400 hover:text-blue-300 underline mt-2"
+                  className="mt-3 text-sm font-semibold text-blue-300 underline transition hover:text-blue-200"
                 >
                   + เพิ่มบันทึกการดำเนินการ
                 </button>
               </div>
             )}
 
-            {/* ประวัติการดำเนินการ */}
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+            <div className="mt-7 border-t border-slate-800 pt-5">
+              <p className="text-xs font-semibold tracking-[0.14em] text-slate-500">
                 ประวัติการดำเนินการ
               </p>
+
               {!selected.incident_actions?.length ? (
-                <p className="text-sm text-gray-600 py-4 text-center">ยังไม่มีการบันทึก</p>
+                <p className="py-7 text-center text-sm text-slate-600">ยังไม่มีการบันทึก</p>
               ) : (
-                <div className="flex flex-col gap-3">
+                <div className="mt-4 flex flex-col gap-3">
                   {[...selected.incident_actions]
-                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                    .map((a) => {
-                      const meta = actionMeta(a.action_type);
+                    .sort(
+                      (a, b) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    )
+                    .map((action) => {
+                      const meta = actionMeta(action.action_type);
+
                       return (
-                        <div key={a.id} className="flex items-start gap-3 text-sm">
-                          <span className="text-lg leading-none">{meta.icon}</span>
+                        <div
+                          key={action.id}
+                          className="flex items-start gap-3 rounded-xl border border-slate-800/80 bg-slate-950/25 p-3"
+                        >
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800">
+                            {meta.icon}
+                          </span>
+
                           <div className="min-w-0 flex-1">
-                            <p className="text-gray-200">
-                              <span className="font-bold">{a.handled_by}</span> — {meta.label}
+                            <p className="text-sm text-slate-200">
+                              <span className="font-bold text-white">{action.handled_by}</span> —{' '}
+                              {meta.label}
                             </p>
-                            {a.note && <p className="text-gray-500">{a.note}</p>}
-                            <p className="text-[11px] text-gray-600 mt-0.5">{timeAgo(a.created_at)}</p>
+                            {action.note && <p className="mt-1 text-sm text-slate-500">{action.note}</p>}
+                            <p className="mt-1 text-[11px] text-slate-600">{timeAgo(action.created_at)}</p>
                           </div>
                         </div>
                       );
@@ -595,6 +810,6 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
-    </div>
+    </main>
   );
 }
